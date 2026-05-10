@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- White Background -->
+  <rect width="512" height="512" rx="114" fill="#FFFFFF"/>
+
+  <!-- Alarm Clock Icon (Scaled down for more blank space, Blue color) -->
+  <g transform="translate(140, 140) scale(9.66)">
+    <!-- Outer ring -->
+    <path fill="#3F51B5" d="M12,4c-4.42,0 -8,3.58 -8,8s3.58,8 8,8 8,-3.58 8,-8 -3.58,-8 -8,-8zM12,18.5c-3.59,0 -6.5,-2.91 -6.5,-6.5s2.91,-6.5 6.5,-6.5 6.5,2.91 6.5,6.5 -2.91,6.5 -6.5,6.5z" />
+    <!-- Clock hands -->
+    <path fill="#3F51B5" d="M12.5,8H11v4.33l3.5,2.1 0.75,-1.23 -2.75,-1.65V8z" />
+    <!-- Left bell -->
+    <path fill="#3F51B5" d="M1.02,7.21l3.53,-3.53 1.41,1.41L2.44,8.62z" />
+    <!-- Right bell -->
+    <path fill="#3F51B5" d="M18.04,5.09l1.41,-1.41 3.53,3.53 -1.41,1.41z" />
+  </g>
+</svg>

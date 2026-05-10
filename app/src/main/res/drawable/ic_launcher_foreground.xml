@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="27"
+        android:translateY="27"
+        android:scaleX="2.25"
+        android:scaleY="2.25">
+        <!-- Blue icon color (#3F51B5) -->
+        <!-- Outer ring of the clock -->
+        <path
+            android:fillColor="#3F51B5"
+            android:pathData="M12,4c-4.42,0 -8,3.58 -8,8s3.58,8 8,8 8,-3.58 8,-8 -3.58,-8 -8,-8zM12,18.5c-3.59,0 -6.5,-2.91 -6.5,-6.5s2.91,-6.5 6.5,-6.5 6.5,2.91 6.5,6.5 -2.91,6.5 -6.5,6.5z" />
+        <!-- Clock hands -->
+        <path
+            android:fillColor="#3F51B5"
+            android:pathData="M12.5,8H11v4.33l3.5,2.1 0.75,-1.23 -2.75,-1.65V8z" />
+        <!-- Left bell -->
+        <path
+            android:fillColor="#3F51B5"
+            android:pathData="M1.02,7.21l3.53,-3.53 1.41,1.41L2.44,8.62z" />
+        <!-- Right bell -->
+        <path
+            android:fillColor="#3F51B5"
+            android:pathData="M18.04,5.09l1.41,-1.41 3.53,3.53 -1.41,1.41z" />
+    </group>
+</vector>
