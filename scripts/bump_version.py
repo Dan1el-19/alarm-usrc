@@ -69,5 +69,5 @@ if __name__ == "__main__":
     new_ver = bump_version(args.file, args.bump)
     print(f"::set-output name=new_version::{new_ver}")
     # For modern GitHub Actions
-    with open(sys.argv[0].replace('bump_version.py', 'version.txt'), 'w') as f:
+    with open('scripts/version.txt', 'w') as f:
         f.write(new_ver)
