@@ -7,6 +7,17 @@ import java.time.LocalDate
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                handleReceive(context, intent)
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
+    }
+
+    private fun handleReceive(context: Context, intent: Intent) {
         val repository = SettingsRepository(context)
         val settings = repository.getSettings()
         val scheduler = AlarmScheduler(context)
@@ -32,7 +43,7 @@ class ReminderReceiver : BroadcastReceiver() {
             }
             "ACTION_FALLBACK_ALARM" -> {
                 if (!alreadySelected) {
-                    applyFallback(context, repository, scheduler, notificationHelper, settings)
+                    applyFallback(scheduler, notificationHelper, settings)
                 }
             }
             else -> {
@@ -52,11 +63,9 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 
     private fun applyFallback(
-        context: Context,
-        repository: SettingsRepository,
         scheduler: AlarmScheduler,
         helper: NotificationHelper,
-        settings: AppSettings
+        settings: AppSettings,
     ) {
         val tomorrow = LocalDate.now().plusDays(1)
         val dayOfWeek = tomorrow.dayOfWeek.value // Tomorrow's day

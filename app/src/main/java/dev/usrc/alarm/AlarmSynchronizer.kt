@@ -15,37 +15,32 @@ class AlarmSynchronizer(private val context: Context) {
 
     fun synchronize(variant: AlarmVariant) {
         Logger.d("SYNC: Starting standalone sync for ${variant.name}")
-        
-        Thread {
-            try {
-                // 1. Internal State Verification/Cleanup (Only our app's alarms)
-                cancelInternalAlarms()
-                
-                if (variant.noAlarms) {
-                    Logger.d("SYNC: Variant is 'No Alarms'. Internal cleanup done.")
-                    return@Thread
-                }
-                
-                val tomorrow = LocalDate.now().plusDays(1).toString()
-                executeSchedule(variant, tomorrow)
-                
-                Logger.d("SYNC: Completed successfully for ${variant.name}")
-            } catch (e: Exception) {
-                Logger.e("SYNC: Critical error during synchronization", e)
+        try {
+            // 1. Internal State Verification/Cleanup (Only our app's alarms)
+            cancelInternalAlarms()
+
+            if (variant.noAlarms) {
+                Logger.d("SYNC: Variant is 'No Alarms'. Internal cleanup done.")
+                return
             }
-        }.start()
+
+            val tomorrow = LocalDate.now().plusDays(1).toString()
+            executeSchedule(variant, tomorrow)
+
+            Logger.d("SYNC: Completed successfully for ${variant.name}")
+        } catch (e: Exception) {
+            Logger.e("SYNC: Critical error during synchronization", e)
+        }
     }
 
     fun restoreInternalAlarmsOnly(variant: AlarmVariant, date: String) {
         Logger.d("SYNC: Restoring internal alarms only for $date")
-        Thread {
-            cancelInternalAlarms()
-            if (variant.noAlarms) return@Thread
-            
-            variant.alarmTimes.forEachIndexed { index, timeString ->
-                scheduleInternalAlarmOnly(index, timeString, date)
-            }
-        }.start()
+        cancelInternalAlarms()
+        if (variant.noAlarms) return
+
+        variant.alarmTimes.forEachIndexed { index, timeString ->
+            scheduleInternalAlarmOnly(index, timeString, date)
+        }
     }
 
     private fun executeSchedule(variant: AlarmVariant, date: String) {
@@ -63,8 +58,6 @@ class AlarmSynchronizer(private val context: Context) {
     private fun scheduleSingleAlarm(index: Int, timeString: String, date: String): Boolean {
         return try {
             val time = LocalTime.parse(timeString)
-            val scheduledTime = ZonedDateTime.of(LocalDate.parse(date), time, ZoneId.systemDefault())
-
             // A. Internal Fallback Alarm
             scheduleInternalAlarmOnly(index, timeString, date)
 
@@ -94,7 +87,7 @@ class AlarmSynchronizer(private val context: Context) {
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context, AlarmScheduler.ALARM_BASE_REQUEST_CODE + index, intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val showIntent = Intent(context, MainActivity::class.java)
@@ -104,7 +97,11 @@ class AlarmSynchronizer(private val context: Context) {
         )
 
         val alarmClockInfo = AlarmManager.AlarmClockInfo(scheduledTime.toInstant().toEpochMilli(), showPendingIntent)
-        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+        try {
+            alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+        } catch (e: SecurityException) {
+            Logger.e("SYNC: SecurityException while setting alarm clock", e)
+        }
         Logger.d("SYNC: Internal backup alarm $index set for $timeString")
     }
 
@@ -120,9 +117,5 @@ class AlarmSynchronizer(private val context: Context) {
                 pendingIntent.cancel()
             }
         }
-    }
-
-    private fun verifyFinalState(variant: AlarmVariant) {
-        Logger.d("SYNC: Verification pass: All ${variant.alarmTimes.size} intents sent.")
     }
 }

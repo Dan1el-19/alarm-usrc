@@ -3,18 +3,12 @@ package dev.usrc.alarm
 import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -40,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import dev.usrc.alarm.ui.theme.AlarmTheme
 import java.time.LocalDate
+import java.util.Locale
 import java.util.UUID
 
 enum class Screen { Main, Settings, EditVariant, Logs }
@@ -91,16 +87,12 @@ fun AppContent() {
                 onOpenLogs = { currentScreen = Screen.Logs },
                 onSelectVariant = { variant ->
                     Logger.d("UI: Selecting variant ${variant.name}")
-                    scheduler.scheduleAlarmsForVariant(variant)
-                    scheduler.cancelSecondReminder()
-                    scheduler.cancelFallback()
-                    repository.updateSettings { 
-                        it.copy(
-                            lastSelectedVariantId = variant.id,
-                            lastSelectedDate = LocalDate.now().toString()
-                        )
-                    }
-                    refreshSettings()
+                    Thread {
+                        scheduler.scheduleAlarmsForVariant(variant)
+                        scheduler.cancelSecondReminder()
+                        scheduler.cancelFallback()
+                        refreshSettings()
+                    }.start()
                 },
                 onScheduleReminder = {
                     scheduler.scheduleReminder(settings.reminderTime)
@@ -112,11 +104,10 @@ fun AppContent() {
                     scheduler.cancelReminder()
                     repository.updateSettings { it.copy(reminderEnabled = false) }
                     refreshSettings()
-                },
-                onTestReminder = {
-                    scheduler.scheduleTestReminder()
                 }
-            )
+            ) {
+                scheduler.scheduleTestReminder()
+            }
             Screen.Settings -> SettingsScreenOneUI(
                 settings = settings,
                 onBack = { currentScreen = Screen.Main },
@@ -127,12 +118,11 @@ fun AppContent() {
                 onEditVariant = { variant ->
                     editingVariant = variant
                     currentScreen = Screen.EditVariant
-                },
-                onAddVariant = {
-                    editingVariant = AlarmVariant(UUID.randomUUID().toString(), "Nowy", emptyList())
-                    currentScreen = Screen.EditVariant
                 }
-            )
+            ) {
+                editingVariant = AlarmVariant(UUID.randomUUID().toString(), "Nowy", emptyList())
+                currentScreen = Screen.EditVariant
+            }
             Screen.EditVariant -> EditVariantScreenOneUI(
                 variant = editingVariant!!,
                 onBack = { currentScreen = Screen.Settings },
@@ -148,18 +138,17 @@ fun AppContent() {
                     repository.saveSettings(newSettings)
                     settings = newSettings
                     currentScreen = Screen.Settings
-                },
-                onDelete = { id ->
-                    val newVariants = settings.variants.filter { it.id != id }
-                    val newSettings = settings.copy(variants = newVariants)
-                    repository.saveSettings(newSettings)
-                    settings = newSettings
-                    currentScreen = Screen.Settings
                 }
-            )
-            Screen.Logs -> LogsScreenOneUI(
-                onBack = { currentScreen = Screen.Main }
-            )
+            ) { id ->
+                val newVariants = settings.variants.filter { it.id != id }
+                val newSettings = settings.copy(variants = newVariants)
+                repository.saveSettings(newSettings)
+                settings = newSettings
+                currentScreen = Screen.Settings
+            }
+            Screen.Logs -> LogsScreenOneUI {
+                currentScreen = Screen.Main
+            }
         }
     }
 }
@@ -185,9 +174,13 @@ fun OneUIContainer(
                 .fillMaxWidth()
                 .padding(top = 64.dp, bottom = 32.dp, start = 24.dp, end = 24.dp)
         ) {
-            if (onBack != null) {
-                IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Wstecz", tint = MaterialTheme.colorScheme.onBackground)
+            onBack?.let {
+                IconButton(onClick = it, modifier = Modifier.offset(x = (-12).dp)) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Wstecz",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
             Text(
@@ -198,9 +191,9 @@ fun OneUIContainer(
                 ),
                 color = MaterialTheme.colorScheme.onBackground
             )
-            if (subtitle != null) {
+            subtitle?.let {
                 Text(
-                    text = subtitle,
+                    text = it,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
@@ -245,9 +238,9 @@ fun OneUICard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(modifier = modifier.padding(vertical = 10.dp)) {
-        if (title != null) {
+        title?.let {
             Text(
-                text = title.uppercase(),
+                text = it.uppercase(Locale.getDefault()),
                 style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.sp),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
@@ -374,18 +367,19 @@ fun MainScreenOneUI(
                 OneUICard(title = "Aktualny Status") {
                     val activeVariant = settings.variants.find { it.id == settings.selectedVariantId }
                     val isTodaySelection = settings.selectedVariantDate == LocalDate.now().plusDays(1).toString()
+                    val isActive = (activeVariant != null) && isTodaySelection
                     
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = if (activeVariant != null && isTodaySelection) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                             modifier = Modifier.size(54.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    if (activeVariant != null && isTodaySelection) Icons.Default.Check else Icons.Default.Close,
+                                    if (isActive) Icons.Default.Check else Icons.Default.Close,
                                     contentDescription = null,
-                                    tint = if (activeVariant != null && isTodaySelection) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    tint = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
@@ -393,11 +387,11 @@ fun MainScreenOneUI(
                         Spacer(modifier = Modifier.width(20.dp))
                         Column {
                             Text(
-                                text = if (activeVariant != null && isTodaySelection) activeVariant.name else "Brak wyboru",
+                                text = if (isActive) activeVariant.name else "Brak wyboru",
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
                             )
                             Text(
-                                text = if (activeVariant != null && isTodaySelection) "Na jutro: ${settings.selectedVariantDate}" else "Czeka na decyzję (Auto o 22:00)",
+                                text = if (isActive) "Na jutro: ${settings.selectedVariantDate}" else "Czeka na decyzję (Auto o 22:00)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -446,10 +440,11 @@ fun MainScreenOneUI(
                 )
             }
 
-            items(settings.variants) { variant ->
-                val isSelected = settings.selectedVariantId == variant.id && settings.selectedVariantDate == LocalDate.now().plusDays(1).toString()
-                Surface(
-                    onClick = { onSelectVariant(variant) },
+                items(settings.variants) { variant ->
+                    val isSelected = (settings.selectedVariantId == variant.id) &&
+                        (settings.selectedVariantDate == LocalDate.now().plusDays(1).toString())
+                    Surface(
+                        onClick = { onSelectVariant(variant) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     shape = RoundedCornerShape(32.dp),
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -520,35 +515,47 @@ fun SettingsScreenOneUI(
     var message by remember { mutableStateOf(settings.notificationMessage) }
     var dayDefaults by remember { mutableStateOf(settings.dayDefaults) }
 
+    // Use rememberUpdatedState to ensure the latest values are captured in onDispose
+    val currentReminderTime by rememberUpdatedState(reminderTime)
+    val currentTitle by rememberUpdatedState(title)
+    val currentMessage by rememberUpdatedState(message)
+    val currentDayDefaults by rememberUpdatedState(dayDefaults)
+    val currentSettings by rememberUpdatedState(settings)
+    val currentOnSaveSettings by rememberUpdatedState(onSaveSettings)
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val updated = currentSettings.copy(
+                reminderTime = currentReminderTime,
+                notificationTitle = currentTitle,
+                notificationMessage = currentMessage,
+                dayDefaults = currentDayDefaults
+            )
+            currentOnSaveSettings(updated)
+        }
+    }
+
     val days = listOf("Poniedziałek" to 1, "Wtorek" to 2, "Środa" to 3, "Czwartek" to 4, "Piątek" to 5, "Sobota" to 6, "Niedziela" to 7)
 
     OneUIContainer(
         title = "Ustawienia",
-        onBack = {
-            onSaveSettings(settings.copy(
-                reminderTime = reminderTime,
-                notificationTitle = title,
-                notificationMessage = message,
-                dayDefaults = dayDefaults
-            ))
-            onBack()
-        }
+        onBack = onBack
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 OneUICard(title = "Powiadomienia") {
-                    SettingsTextField(label = "Godzina (HH:mm)", value = reminderTime, onValueChange = { reminderTime = it })
+                    SettingsTextField(label = "Godzina (HH:mm)", value = reminderTime) { reminderTime = it }
                     Spacer(modifier = Modifier.height(24.dp))
-                    SettingsTextField(label = "Tytuł", value = title, onValueChange = { title = it })
+                    SettingsTextField(label = "Tytuł", value = title) { title = it }
                     Spacer(modifier = Modifier.height(24.dp))
-                    SettingsTextField(label = "Treść", value = message, onValueChange = { message = it })
+                    SettingsTextField(label = "Treść", value = message) { message = it }
                 }
             }
 
             item {
                 OneUICard(title = "Harmonogram tygodniowy") {
                     days.forEach { (name, id) ->
-                        var showDialog by remember { mutableStateOf(false) }
+                        var showDialog by remember { mutableStateOf(value = false) }
                         val currentVariantId = dayDefaults[id]
 
                         Row(
@@ -596,13 +603,28 @@ fun SettingsScreenOneUI(
                 OneUICard(title = "Zarządzaj wariantami") {
                     settings.variants.forEachIndexed { index, variant ->
                         ListItem(
-                            headlineContent = { Text(variant.name, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleLarge) },
-                            supportingContent = { Text(if (variant.noAlarms) "Brak alarmów" else variant.alarmTimes.joinToString(", ")) },
+                            headlineContent = {
+                                Text(
+                                    variant.name,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    if (variant.noAlarms) "Brak alarmów" else variant.alarmTimes.joinToString(", ")
+                                )
+                            },
                             trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                             modifier = Modifier.clickable { onEditVariant(variant) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                         )
-                        if (index < settings.variants.size - 1) HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                        if (index < (settings.variants.size - 1)) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
                     }
                     Button(
                         onClick = onAddVariant,
@@ -653,13 +675,13 @@ fun EditVariantScreenOneUI(
     var noAlarms by remember { mutableStateOf(variant.noAlarms) }
 
     OneUIContainer(
-        title = if (name.isEmpty()) "Nowy wariant" else name,
+        title = name.ifEmpty { "Nowy wariant" },
         onBack = onBack
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 OneUICard(title = "Podstawowe") {
-                    SettingsTextField(label = "Nazwa wariantu", value = name, onValueChange = { name = it })
+                    SettingsTextField(label = "Nazwa wariantu", value = name) { name = it }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -678,7 +700,7 @@ fun EditVariantScreenOneUI(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                var showTimePicker by remember { mutableStateOf(false) }
+                                var showTimePicker by remember { mutableStateOf(value = false) }
                                 
                                 Surface(
                                     modifier = Modifier.weight(1f).clickable { showTimePicker = true },
@@ -712,11 +734,13 @@ fun EditVariantScreenOneUI(
                                     AlertDialog(
                                         onDismissRequest = { showTimePicker = false },
                                         confirmButton = {
-                                            TextButton(onClick = {
-                                                val newTime = String.format("%02d:%02d", state.hour, state.minute)
-                                                alarmTimes = alarmTimes.toMutableList().apply { set(index, newTime) }
-                                                showTimePicker = false
-                                            }) { Text("OK", fontWeight = FontWeight.Bold) }
+                                            TextButton(
+                                                onClick = {
+                                                    val newTime = String.format(Locale.getDefault(), "%02d:%02d", state.hour, state.minute)
+                                                    alarmTimes = alarmTimes.toMutableList().apply { set(index, newTime) }
+                                                    showTimePicker = false
+                                                }
+                                            ) { Text("OK", fontWeight = FontWeight.Bold) }
                                         },
                                         text = { TimePicker(state = state) }
                                     )
